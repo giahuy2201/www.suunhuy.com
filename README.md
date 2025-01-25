@@ -41,7 +41,7 @@ bundle install
 Starting a server
 
 ```bash
-bundle exec jekyll serve
+bundle exec jekyll serve --livereload
 ```
 
 ## Reference
