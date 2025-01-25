@@ -11,6 +11,10 @@ github_username:  giahuy2201
 theme: minima
 plugins:
   - jekyll-feed
+  - jekyll-toc
 
 sass:
   quiet_deps: true
+
+toc:
+  max_level: 1 # default: 6

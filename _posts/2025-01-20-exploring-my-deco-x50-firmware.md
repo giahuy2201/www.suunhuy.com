@@ -6,12 +6,8 @@ title: Exploring My Deco X50 Firmware
 So I got this TP-Link router from my ISP with my new FTTH subscription that had been made available in my neighborhood since last year. The equipments include this Deco X50 with a custom firmware and a standard off-the-shelf Nokia XGS-PON modem. After some exchange over the phone with their support for new install, I realized the router could be entirely configured and remotely controlled from their system which I think is such a good thing for most people since not everyone is going to enjoy poking around those settings. In fact, if you have to exchange your router for some reason, they could even preload it your PPPoE credentials, thus making the process just plug-and-play when it arrives. Okay, that is good and all but I want to see how this factory provisioning actually works. Let's dump it entire flash.
 
 ## Contents
-- <u>Getting It Open</u>
-- <u>Capturing Boot Log</u>
-- <u>Getting A Console</u>
-- <u>Dumping The Flash</u>
-- <u>Unpacking The Dump</u>
-- <u>Analyzing It</u>
+* TOC
+{:toc}
 
 ## Getting It Open
 The router is compact and like many consummer devices nowaday, there is literally no screw, even under the label on the bottom. Since I didn't want to break it, after looking up some video online, I found this person showing it on [YouTube](https://youtu.be/61SyVmh0ao4?si=6KcfYRqtrpbRofKd) and proceed to follow. After some struggle I got it open and end up leaving some dents on the top edge of the housing.
