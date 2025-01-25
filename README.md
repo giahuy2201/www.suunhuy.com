@@ -1,7 +1,5 @@
 # loweffort.suunhuy.com
 
-Documenting my journey on finding the next shiny thing.
-
 ## Setting Environment
 
 Use [ruby-install](https://github.com/postmodern/ruby-install) to manage ruby versions
