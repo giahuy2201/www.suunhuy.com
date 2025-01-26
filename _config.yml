@@ -1,17 +1,22 @@
 title: Suu Nhuy
-author: giahuy
-email: giahuy2201@outlook.com
+author: 
+  name: giahuy
+  email: giahuy2201@outlook.com
 description: >-
   Curiosity takes me places
-baseurl: "/blog" # subpath
+baseurl: "" # subpath
 url: "https://www.suunhuy.com"
-github_username:  giahuy2201
 
-# Build settings
-theme: minima
 plugins:
+  - jekyll-remote-theme
   - jekyll-feed
   - jekyll-toc
+  - jekyll-seo
+  
+remote_theme: jekyll/minima
+
+minima:
+  skin: auto
 
 sass:
   quiet_deps: true

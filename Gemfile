@@ -1,8 +1,10 @@
 source "https://rubygems.org"
 
 gem "jekyll", "~> 4.3.2"
-gem "minima", "~> 2.5"
+gem "jekyll-remote-theme"
 gem 'jekyll-toc'
+gem 'jekyll-seo'
+gem 'jekyll-seo-tag'
 
 # gem "github-pages", group: :jekyll_plugins
 # plugins
