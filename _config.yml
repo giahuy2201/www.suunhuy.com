@@ -1,10 +1,10 @@
-title: low effort blog
+title: Suu Nhuy
 author: giahuy
 email: giahuy2201@outlook.com
 description: >-
   Curiosity takes me places
-baseurl: "" # subpath
-url: "https://loweffort.suunhuy.com"
+baseurl: "/blog" # subpath
+url: "https://www.suunhuy.com"
 github_username:  giahuy2201
 
 # Build settings
