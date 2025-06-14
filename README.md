@@ -1,4 +1,17 @@
-## Setting Environment
+## Development
+
+## Docker
+
+Start a build server inside a docker container without the hassle of software installation
+
+```bash
+# Build environment
+docker build -t jekyll-www .
+# Start server from a container
+docker run -it --rm -v $PWD:/src -p 4000:4000 --name jekyll-www jekyll-www
+```
+
+### macOS
 
 Use [ruby-install](https://github.com/postmodern/ruby-install) to manage ruby versions
 
@@ -25,8 +38,6 @@ Install more
 ```bash
 gem install jekyll bundler 
 ```
-
-## Usage
 
 Install libraries
 
