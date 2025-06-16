@@ -1,4 +1,4 @@
-title: Suu Nhuy
+title: Sửu Blog
 author: 
   name: giahuy
   email: giahuy2201@outlook.com
@@ -17,6 +17,7 @@ remote_theme: jekyll/minima
 
 minima:
   skin: auto
+  show_excerpts: true
 
 sass:
   quiet_deps: true
