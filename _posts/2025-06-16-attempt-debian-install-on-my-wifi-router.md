@@ -1,12 +1,12 @@
 ---
 layout: post
 title: Attempt Debian install on my WiFi router
-excerpt: Linksys EA7250 doesn't have a wireless driver to run OpenWRT, but it's got a whopping 2 cores of ARMv7 CPU which are better then those MIPS processors commonly found in these cheap routers out there. Let's not get this goes to waste and make a custom Debian build for it to see how it's stack up against a Raspberry Pi 4 I have laying around.
+excerpt: Linksys EA7250 doesn't have a wireless driver to run OpenWRT, but it's got a whopping 2 cores of ARMv7 CPU which are better then those MIPS processors commonly found in these cheap routers out there. Let's not get this goes to waste and make a custom Debian build for it to see how it stacks up against a Raspberry Pi 4 I have laying around.
 ---
 
 Last year, as I was on the hunt for some cheap routers with interesting features as a hobby (yes I'm kind of a router enjoyer myself, but people collect weird things all the time, aren't they), I stumbled upon this rare species, the [Linksys EA7500v3]() (specs below) which unlike many other Linksys models has ARM CPU. I specifically only look for those with mediatek chips because these have great support in Linux. Later on, I discovered that those wireless chips in this particular CPU have yet to get any open source driver support in OpenWRT, also the second ARM doesn't work in OpenWRT. In the end, I bought it anyway because without wireless, this could still be a good host for experimenting with custom linux build and a greate oppotunity for me to learn some kernel driver development.
 
-Specs:
+__Specs__:
 - CPU: Mediatek 
 - RAM: 
 - Flash:
@@ -221,9 +221,194 @@ And the flash map too, but unfortunately mtdparts variable wasn't set, so u-boot
 
 ## Dump the stock firmware
 
-## I did messed it up
+Now that we've seen how u-boot ask for the kernel from flash using `nand` command, let's ask u-boot to give it the entire flash content including the spare area.
+
+```
+MT7629> help nand
+nand - NAND sub-system
+
+Usage:
+nand info - show available NAND devices
+nand device [dev] - show or set current device
+nand read - addr off|partition size
+nand write - addr off|partition size
+    read/write 'size' bytes starting at offset 'off'
+    to/from memory address 'addr', skipping bad blocks.
+nand read.raw - addr off|partition [count]
+nand write.raw - addr off|partition [count]
+    Use read.raw/write.raw to avoid ECC and access the flash as-is.
+nand erase[.spread] [clean] off size - erase 'size' bytes from offset 'off'
+    With '.spread', erase enough for given file size, otherwise,
+    'size' includes skipped bad blocks.
+nand erase.part [clean] partition - erase entire mtd partition'
+nand erase.chip [clean] - erase entire chip'
+nand bad - show bad blocks
+nand dump[.oob] off - dump page
+nand scrub [-y] off size | scrub.part partition | scrub.chip
+    really clean NAND erasing bad blocks (UNSAFE)
+nand markbad off [...] - mark bad block(s) at offset (UNSAFE)
+nand biterr off - make a bit error at offset (UNSAFE)
+```
+
+It looks like could you `nand dump <start address in hex>` to dump a single page (2048-byte main + 64-byte spare) starting at that address
+
+```
+MT7629> nand dump 0
+Address 0 dump (2048):
+42 4f 4f 54 4c 4f 41 44 45 52 21 00 56 30 30 36 4e 46 49 49 4e 46 4f 00 00 00 00 08 05 00 40 00
+40 00 00 08 10 00 16 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 b1 11 39 64 db 22 23 de c5 24 e5 fe 2c 7f ba d0 2a ba e5 b2 2e 08 01 41 f1 24 00 00
+42 4f 4f 54 4c 4f 41 44 45 52 21 00 56 30 30 36 4e 46 49 49 4e 46 4f 00 00 00 00 08 05 00 40 00
+40 00 00 08 10 00 16 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 b1 11 39 64 db 22 23 de c5 24 e5 fe 2c 7f ba d0 2a ba e5 b2 2e 08 01 41 f1 24 00 00
+42 4f 4f 54 4c 4f 41 44 45 52 21 00 56 30 30 36 4e 46 49 49 4e 46 4f 00 00 00 00 08 05 00 40 00
+40 00 00 08 10 00 16 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 b1 11 39 64 db 22 23 de c5 24 e5 fe 2c 7f ba d0 2a ba e5 b2 2e 08 01 41 f1 24 00 00
+42 4f 4f 54 4c 4f 41 44 45 52 21 00 56 30 30 36 4e 46 49 49 4e 46 4f 00 00 00 00 08 05 00 40 00
+40 00 00 08 10 00 16 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 b1 11 39 64 db 22 23 de c5 24 e5 fe 2c 7f ba d0 2a ba e5 b2 2e 08 01 41 f1 24 00 00
+
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+
+OOB (64):
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 00 00 00 00 00
+```
+
+To automate this, I prepare a python script to ask u-boot for one page at a time and save the result into a `dump-<hex address>.bin` file, and the reason for including the starting address is because it will take a long time (1.6s for each page) and my uart adapter may give up at some point, thus i have to concatenate multiple `.bin` files to get the entire flash. 
+
+```python
+{% include snippets/dump-nand.py %}
+```
+
+## I did messed it up the first time
+
+The other way to dump the flash I didn't want to mention is to lift the flash chip (located on the back) off the pcb and use a chip programmer to read the it, you'll get the entire flash content in less in 2 minutes (at least on my XGecu T48). In fact, I attempted this on the first victim, the EA7500v3 and no matter how much heat I gave it, I couldn't make it budge but ended up lifting it off in pieces (yes skill issue isn't it). The failure haunted me since, but I would still try it for the secret sauce on things I would never use again. Which comes to the second problem, it's not that I'm afraid of lifting up chips, it's just those leadless one (like WSON-8 which have no 'legs') because putting them back on the board feels impossible, and I have accompished 0 so far. This feels like a bit of a rant too.
 
 ## Recover
+
+With the chip showing off its shiny silicon, the idea of running debian on this ARM chip goes down the drain. However, by coincident early this year, I found another ad about this EA7250 which has no entry in OpenWRT device list or any other device wiki sites at the time, so I went straight to Linksys support website for this model and got myself a copy of the firmware. Thankfully there is encryption as expected, I was able to disect it with binwalk and got my hand on the lovely [linux dts](https://www.kernel.org/doc/html/latest/devicetree/usage-model.html) file
+
+```c
+/dts-v1/;
+
+/ {
+	timestamp = <0x621974e5>;
+	description = "ARM OpenWrt FIT (Flattened Image Tree)";
+	#address-cells = <0x01>;
+
+	images {
+
+		kernel@1 {
+			description = "ARM OpenWrt Linux-4.4.146";
+			data = <some binary>;
+			type = "kernel";
+			arch = "arm";
+			os = "linux";
+			compression = "lzma";
+			load = <0x40008000>;
+			entry = <0x40008000>;
+
+			hash@1 {
+				value = <0x1587a0f5>;
+				algo = "crc32";
+			};
+
+			hash@2 {
+				value = <0xdf353030 0x8a23dbe4 0x60b460f4 0xe5212e84 0x72785209>;
+				algo = "sha1";
+			};
+		};
+
+		fdt@1 {
+			description = "ARM OpenWrt MT7629-LYNX-RFB3 device tree blob";
+			data = [some more binary];
+			type = "flat_dt";
+			arch = "arm";
+			compression = "none";
+
+			hash@1 {
+				value = <0x5ea132d0>;
+				algo = "crc32";
+			};
+
+			hash@2 {
+				value = <0x83209e24 0xc92bef00 0x56e693f8 0x276b2df7 0xa00e5266>;
+				algo = "sha1";
+			};
+		};
+	};
+
+	configurations {
+		default = "config@1";
+
+		config@1 {
+			description = "OpenWrt";
+			kernel = "kernel@1";
+			fdt = "fdt@1";
+		};
+	};
+};
+```
+
+We could dig deeper for the full tree with all the hardware by decoding the binary (which I leave out) in fdt@1, but knowing just the cpu is good enough. With that detail and seller's pictures, this one feels like 'old wine in new bottles' (I just looked up this one, do people actually use it), then later that day I snagged it without second thought because the price couldn't be any better, and the seller was really nice too.
+
+Update: I look it up again and this [device.report](https://device.report/linksys/EA7250) shows that there are other models under the same hardware out there
+
+To sumarize, this is the one that I first got the full flash content from using that python script above. We'll set that aside for a letter day.
 
 ## Set up a test network
 Configure tftp server with dnsmasq
