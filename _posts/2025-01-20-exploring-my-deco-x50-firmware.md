@@ -1,6 +1,7 @@
 ---
 layout: post
-title: Exploring My Deco X50 Firmware
+title: Explore My Deco X50 Firmware
+excerpt: Looking for some secret sauce in my ISP router
 ---
 
 So I got this TP-Link router from my ISP with my new FTTH subscription that had been made available in my neighborhood since last year. The equipments include this Deco X50 with a custom firmware and a standard off-the-shelf Nokia XGS-PON modem. After some exchange over the phone with their support for new install, I realized the router could be entirely configured and remotely controlled from their system which I think is such a good thing for most people since not everyone is going to enjoy poking around those settings. In fact, if you have to exchange your router for some reason, they could even preload it your PPPoE credentials, thus making the process just plug-and-play when it arrives. Okay, that is good and all but I want to see how this factory provisioning actually works. Let's dump it entire flash.
