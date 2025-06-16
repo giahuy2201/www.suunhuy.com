@@ -35,3 +35,4 @@ bundle exec jekyll serve --livereload
 ## Reference
 
 https://jekyllrb.com/docs/installation/macos/
+https://github.com/jekyll/minima

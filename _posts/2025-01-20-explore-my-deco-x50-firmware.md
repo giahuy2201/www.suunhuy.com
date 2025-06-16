@@ -13,11 +13,11 @@ So I got this TP-Link router from my ISP with my new FTTH subscription that had 
 ## Getting It Open
 The router is compact and like many consummer devices nowaday, there is literally no screw, even under the label on the bottom. Since I didn't want to break it, after looking up some video online, I found this person showing it on [YouTube](https://youtu.be/61SyVmh0ao4?si=6KcfYRqtrpbRofKd) and proceed to follow. After some struggle I got it open and end up leaving some dents on the top edge of the housing.
 
-![Inner assembly upside down](/assets/imgs/deco-x50-inside.jpg)
+![Inner assembly upside down](/assets/imgs/2025-01-20/deco-x50-inside.jpg)
 
 Just a few more screws from the heatsinks on both side and the PCB is out.
 
-![The PCB](/assets/imgs/deco-x50-pcb.jpg)
+![The PCB](/assets/imgs/2025-01-20/deco-x50-pcb.jpg)
 
 Upon a close inspection, there are 4 pins (near the bottom edge) clearly labeled by the manufacturer, how nice of them! Checking the voltage with a multimeter reveals that it is running at 1.8V. Alright, time to capture my the boot log.
 
@@ -196,7 +196,7 @@ Device Size:128 MiB, Page size:2048, Spare Size:64, ECC:4-bit
 The flash chip uses WSON8 packaging which unlike SOP8 features a large solder pad on the bottom to help with heat disspipation. This in turn also making our job hard and riskier to do with just a heat gun. It is due to the fact we need to make that big area connected the ground plane of the whole pcb melt, but pumping too much heat onto some component for too long can cause problems. However, I got to work with what I have.
 I proceeded to heat up the chip with flux and also the back of board where it is sitting on. After some time, I lifted the chip and solder it onto a breakout board to use with my XGecu T48 read its content. With the prorietary XGPro software I had running on my only windows machine layout around, I had to dial down the speed and reading it was successfull. It is now time to unpack it
 
-![Flash chip on breakout board plugged into a T48 flash reader](/assets/imgs/wson8-breakout.jpg)
+![Flash chip on breakout board plugged into a T48 flash reader](/assets/imgs/2025-01-20/wson8-breakout.jpg)
 
 ## Unpacking The Dump
 Looking up the datasheet for this chip model, I have the page layout being 1024 bytes of data followed by 64 bytes of spare, exactly what we saw from the boot log. Running the binary dump directly through `binwalk` give a long list of XZ compressed data and UBI image at addresses that seem random and with some experience looking at binary, one could easily tell these are just false positives. After some research because I didn't know much at the time, new devices like what I have here uses NAND typed flash chip which give large storage capacity at low cost with a tradeoff being that each block, a smallest unit of erase/write, can wear out after certain number of write cycles. To combat this, manufacturer gives product developers an tiny extra amount of space on each page to store this extra data called Out-Of-Band data that is used to correct the actual data (up to a certain number of error - ECC capability)
