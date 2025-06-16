@@ -8,7 +8,7 @@ Start a build server inside a docker container without the hassle of software in
 # Build environment
 docker build -t jekyll-www .
 # Start server from a container
-docker run -it --rm -v $PWD:/src -p 4000:4000 --name jekyll-www jekyll-www
+docker run -it --rm -v $PWD:/app -p 4000:4000 --name jekyll-www jekyll-www
 ```
 
 ### macOS
