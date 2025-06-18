@@ -411,14 +411,131 @@ Update: I look it up again and this [device.report](https://device.report/linksy
 To sumarize, this is the one that I first got the full flash content from using that python script above. We'll set that aside for a letter day.
 
 ## Set up a test network
-Configure tftp server with dnsmasq
-Set up build environment for later
+
+From the boot menu, it's obvious that this device and in fact, almost all of these cheap wifi router support booting from network which will comes in handy when I need to experiment with our own software. The reason we need to get our custom build stuff to run on this is because we always got hit with a login prompt in stock linux after the device fully booted which is as expected and the stock u-boot doesn't support booting anything other than flash and tftp; but come on what else did we expect for this class of devices, it's router bro, normal people don't do weird thing with their router.
+
+Depends on your set up if you want to replicate this, I have the device hooked up with ethernet to same network my PC is on, so we don't have to worry about running another dhcp server when we need one. Here is the `dnsmasq` config file I use to run a tftp server from my PC
+
+```conf
+port=0
+no-dhcp-interface=
+no-daemon
+enable-tftp
+tftp-root=/tftpserver
+tftp-no-fail
+```
+
+We disable DHCP and DNS with the first 2 lines, the folder `/tftpserver` needs to be created with the files we'll put in there being world-readable.
+
+```bash
+chmod o+r -R /tftpserver
+```
 
 ## Build custom u-boot
-To enable usb booting
+
+Next, We build a custom u-boot image with support for booting from usb devices
+
+First, as a homelaber myself, I got many of the great software mirroring on a local [Gitea](https://about.gitea.com/) server running in Docker just for these occasions.
+
+```bash
+git clone https://git.home.suunhuy.com/backuper/u-boot.git
+git checkout v2025.04
+```
+
+Let's do the build in a already prepared Docker image to save us some time with tooling
+
+```bash
+docker run -it --rm -v $PWD:/app --name my-uboot trini/u-boot-gitlab-ci-runner:noble-20250415.1-14May2025 bash
+```
+
+Inside the container, we need some cross compiler since my PC is x86
+
+```bash
+apt install gcc gcc-arm-linux-gnueabihf -y
+export ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf-
+```
+
+Now, switch to a user with the same UID as my PC user, usually `uid=1000` to avoid compiling issues
+
+```bash
+su ubuntu # switch to user ubuntu (uid=1000)
+make mt7629_rfb_defconfig
+```
+
+Make some changes in `make menuconfig` and start the compiling with `make -j$(nproc)`, here are mine
+- `CONFIG_USB`
+- `CONFIG_CMD_BOOTDEV`
+- `CONFIG_CMD_BOOTZ`
+- `CONFIG_CMD_LSBLK`
+- `CONFIG_CMD_MTD`
+- `CONFIG_CMD_PART`
+- `CONFIG_CMD_PCI`
+- `CONFIG_CMD_POWEROFF`
+- `CONFIG_CMD_NFS`
+- `CONFIG_CMD_DHCP`
+- `CONFIG_CMD_DNS`
+- `CONFIG_CMD_PXE`
+- `CONFIG_CMD_SYSBOOT`
+- `CONFIG_CMD_EXT4`
+- `CONFIG_CMD_SQUASHFS`
+
+> Some of these may not actually show up since I only used the included `mt7629_rfb_defconfig` for the reference board when compiling. 
+
+Specifically, it is missing the device source tree which is a `.dts` file that tells the kernel what type of hardware located on which memory addresses. However, all we need from this custom build is usb support to use as jumping point to boot into Debian, the default defconfig is just good enough.
+
+But then on second though, the first time i built with mt7629_rfb_defconfig cause nothing to be recognize. For curiosity, I then went and port the dts file for this EA7500v3 over from OpenWRT, here are a few compiling errors I encountered and managed to compile it successfully
+- copying `mt7629-linksys-ea7500-v3.dts` and `mt7629.dtsi` over into u-boot at `arch/arm/dts`, run `make` and got 'Label or path not found' for bch, ssusb, pio and u3phy0
+- proceeded to `grep` for those this OpenWRT and found patch that define them at `target/linux/mediatek/patches-6.6/130-dts-mt7629-add-snand-support.patch`, I then copied them over into a my own file named `mt7629-mine.dtsi` and included it `mt7629-linksys-ea7500-v3.dts`. Running `make` again gave 'Duplicate label 'u2port0' on /t-phy@1a0c4000/usb-phy@0 and /usb-phy@1a0c4000/usb-phy@0'
+- after another `grep` for 'u2port0', it clear that the `mt7629.dtsi` I copied over had already defined it under 'u3phy' but my `mt7629-mine.dtsi` defined it again under 'u3phy0'. I then removed that 'u3phy0' that change all its references in `mt7629-linksys-ea7500-v3.dts` to 'u3phy'
+
+The fixes seemed to have worked, and I use stock u-boot to load the compiled `u-boot.bin` over tftp, and it stopped at `DRAM: initcall failed`
+After carefully comparing the new dts vs dts for reference board, it found the culprit to be myself for forgeting to add an include file name `mt7629-rfb-u-boot.dtsi`. Eventually I finally got it working with the new dts file and was able to control the power LED through `led` command in my new u-boot which hadn't been the case before. Still, I couldn't add get nand info through this new u-boot build since adding `CONFIG_CMD_NAND` cause `make` to failed with `board_nand_init` function missing from `board/mediatek/mt7629/mt7629_rfb.c`.
+
+At this point, I just wanted to take a break from compiling u-boot, we don't even need to read from nand from our u-boot anyway.
+
+```bash
+fedora › file u-boot*
+u-boot:              ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), static-pie linked, with debug_info, not stripped
+u-boot.bin:          DOS executable (COM), start instruction 0xb80000ea 14f09fe5
+u-boot.bin.lzma:     LZMA compressed data, streamed
+u-boot.cfg:          ASCII text
+u-boot.dtb:          Device Tree Blob version 17, size=13112, boot CPU=0, string block size=1023, DT structure block size=12028
+u-boot-dtb.bin:      DOS executable (COM), start instruction 0xb80000ea 14f09fe5
+u-boot-dtb.img:      u-boot legacy uImage, U-Boot 2025.04-dirty for mt7629 \270, Firmware/ARM, Firmware Image (Not compressed), 456132 bytes, Mon Jun 16 19:46:02 2025, Load Address: 0X41E00000, Entry Point: 0X41E00000, Header CRC: 0X261CFC82, Data CRC: 0X85599D65
+u-boot.img:          u-boot legacy uImage, U-Boot 2025.04-dirty for mt7629 \270, Firmware/ARM, Firmware Image (Not compressed), 456132 bytes, Mon Jun 16 19:46:02 2025, Load Address: 0X41E00000, Entry Point: 0X41E00000, Header CRC: 0X261CFC82, Data CRC: 0X85599D65
+u-boot.lds:          assembler source, ASCII text
+u-boot-lzma.img:     u-boot legacy uImage, U-Boot 2025.04-dirty for mt7629 ], Firmware/ARM, Standalone Program (lzma), 215132 bytes, Mon Jun 16 19:46:03 2025, Load Address: 0X41E00000, Entry Point: 0X41E00000, Header CRC: 0XAACDC848, Data CRC: 0X61CE8B3E
+u-boot.map:          ASCII text
+u-boot-mtk.bin:      data
+u-boot-nodtb.bin:    DOS executable (COM), start instruction 0xb80000ea 14f09fe5
+u-boot.srec:         Motorola S-Record; binary data in text format
+u-boot.sym:          ASCII text
+u-boot-with-spl.bin: data
+```
 
 ## Build custom linux
-Compile and try booting it up
+
+In the same manner as building u-boot, we speed things up by using a ubuntu docker container to build the kernel from mainlain source
+
+```bash
+# pull from source
+git clone https://git.home.suunhuy.com/backuper/linux.git
+git checkout v6.15
+# run ubuntu container
+docker run -it --rm -v $PWD:/app --name my-linux ubuntu:noble bash
+# inside container
+apt update
+apt install -y git make gcc g++ device-tree-compiler bc bison flex libssl-dev libncurses-dev python3-ply python3-git libgmp3-dev libmpc-dev
+# install cross-compiler
+apt install -y gcc gcc-arm-linux-gnueabihf
+# switch to ubuntu user (uid=1000)
+su ubuntu
+git checkout 1_36_stable # 37 failed
+export ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf-
+make multi_v7_defconfig
+make menuconfig # CONFIG_NET_DSA_MT7530
+make -j$(nproc)
+```
 
 ## Create a debian image
 
