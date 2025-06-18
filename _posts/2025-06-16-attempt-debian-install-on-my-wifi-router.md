@@ -18,9 +18,6 @@ __Specs__:
 * TOC
 {:toc}
 
-## TLDR
-My youtube video briefing the process and showcasing final result
-
 ## Get It Open
 I like these new Linksys router for the sturdy shell which has a smaller footprint than their previous design and seems like it could take some beating before it breaks, but man I hate it every single time I have to crack it open with those dump clips that just break off afterward or warp the hell out the edges.
 
@@ -483,35 +480,14 @@ Make some changes in `make menuconfig` and start the compiling with `make -j$(np
 
 Specifically, it is missing the device source tree which is a `.dts` file that tells the kernel what type of hardware located on which memory addresses. However, all we need from this custom build is usb support to use as jumping point to boot into Debian, the default defconfig is just good enough.
 
-But then on second though, the first time i built with mt7629_rfb_defconfig cause nothing to be recognize. For curiosity, I then went and port the dts file for this EA7500v3 over from OpenWRT, here are a few compiling errors I encountered and managed to compile it successfully
+But then on second though, for the sake of my curiosity, let's see if I port the dts file for this EA7500v3 over from OpenWRT over. Here a list of compiling errors I encountered and managed to compile it successfully
 - copying `mt7629-linksys-ea7500-v3.dts` and `mt7629.dtsi` over into u-boot at `arch/arm/dts`, run `make` and got 'Label or path not found' for bch, ssusb, pio and u3phy0
-- proceeded to `grep` for those this OpenWRT and found patch that define them at `target/linux/mediatek/patches-6.6/130-dts-mt7629-add-snand-support.patch`, I then copied them over into a my own file named `mt7629-mine.dtsi` and included it `mt7629-linksys-ea7500-v3.dts`. Running `make` again gave 'Duplicate label 'u2port0' on /t-phy@1a0c4000/usb-phy@0 and /usb-phy@1a0c4000/usb-phy@0'
-- after another `grep` for 'u2port0', it clear that the `mt7629.dtsi` I copied over had already defined it under 'u3phy' but my `mt7629-mine.dtsi` defined it again under 'u3phy0'. I then removed that 'u3phy0' that change all its references in `mt7629-linksys-ea7500-v3.dts` to 'u3phy'
+- proceeded to `grep` for those this OpenWRT and found a patch that define them at `target/linux/mediatek/patches-6.6/130-dts-mt7629-add-snand-support.patch`, I then copied them over into a my own file named `mt7629-mine.dtsi` and included it `mt7629-linksys-ea7500-v3.dts`. Running `make` again gave 'Duplicate label 'u2port0' on /t-phy@1a0c4000/usb-phy@0 and /usb-phy@1a0c4000/usb-phy@0'
+- after another `grep` for 'u2port0', it is clear that the `mt7629.dtsi` I copied over had already defined it under 'u3phy' but my `mt7629-mine.dtsi` defined it again under 'u3phy0'. I then removed that 'u3phy0' that change all its references in `mt7629-linksys-ea7500-v3.dts` to 'u3phy'
+- fixes seemed to have worked, and I use stock u-boot to load the compiled `u-boot.bin` over tftp, and it stopped at `DRAM: initcall failed`
+After carefully comparing the new dts vs dts for reference board, it found the culprit to be myself for forgeting to add an include file named `mt7629-rfb-u-boot.dtsi`. Eventually I finally got it working with the new dts file and was able to control the power LED through `led` command in my new u-boot which hadn't been the case before. Still, I couldn't add get nand info through this new u-boot build since adding `CONFIG_CMD_NAND` cause `make` to failed with `board_nand_init` function missing from `board/mediatek/mt7629/mt7629_rfb.c`.
 
-The fixes seemed to have worked, and I use stock u-boot to load the compiled `u-boot.bin` over tftp, and it stopped at `DRAM: initcall failed`
-After carefully comparing the new dts vs dts for reference board, it found the culprit to be myself for forgeting to add an include file name `mt7629-rfb-u-boot.dtsi`. Eventually I finally got it working with the new dts file and was able to control the power LED through `led` command in my new u-boot which hadn't been the case before. Still, I couldn't add get nand info through this new u-boot build since adding `CONFIG_CMD_NAND` cause `make` to failed with `board_nand_init` function missing from `board/mediatek/mt7629/mt7629_rfb.c`.
-
-At this point, I just wanted to take a break from compiling u-boot, we don't even need to read from nand from our u-boot anyway.
-
-```bash
-fedora › file u-boot*
-u-boot:              ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), static-pie linked, with debug_info, not stripped
-u-boot.bin:          DOS executable (COM), start instruction 0xb80000ea 14f09fe5
-u-boot.bin.lzma:     LZMA compressed data, streamed
-u-boot.cfg:          ASCII text
-u-boot.dtb:          Device Tree Blob version 17, size=13112, boot CPU=0, string block size=1023, DT structure block size=12028
-u-boot-dtb.bin:      DOS executable (COM), start instruction 0xb80000ea 14f09fe5
-u-boot-dtb.img:      u-boot legacy uImage, U-Boot 2025.04-dirty for mt7629 \270, Firmware/ARM, Firmware Image (Not compressed), 456132 bytes, Mon Jun 16 19:46:02 2025, Load Address: 0X41E00000, Entry Point: 0X41E00000, Header CRC: 0X261CFC82, Data CRC: 0X85599D65
-u-boot.img:          u-boot legacy uImage, U-Boot 2025.04-dirty for mt7629 \270, Firmware/ARM, Firmware Image (Not compressed), 456132 bytes, Mon Jun 16 19:46:02 2025, Load Address: 0X41E00000, Entry Point: 0X41E00000, Header CRC: 0X261CFC82, Data CRC: 0X85599D65
-u-boot.lds:          assembler source, ASCII text
-u-boot-lzma.img:     u-boot legacy uImage, U-Boot 2025.04-dirty for mt7629 ], Firmware/ARM, Standalone Program (lzma), 215132 bytes, Mon Jun 16 19:46:03 2025, Load Address: 0X41E00000, Entry Point: 0X41E00000, Header CRC: 0XAACDC848, Data CRC: 0X61CE8B3E
-u-boot.map:          ASCII text
-u-boot-mtk.bin:      data
-u-boot-nodtb.bin:    DOS executable (COM), start instruction 0xb80000ea 14f09fe5
-u-boot.srec:         Motorola S-Record; binary data in text format
-u-boot.sym:          ASCII text
-u-boot-with-spl.bin: data
-```
+We copy `u-boot.bin` from root folder to the tftpserver folder I prepared earlier.
 
 ## Build custom linux
 
@@ -537,6 +513,95 @@ make menuconfig # CONFIG_NET_DSA_MT7530
 make -j$(nproc)
 ```
 
+We copy the kernel file compressed `Image.gz` and the device tree `arch/arm/boot/dts/mediatek/mt7629-rfb.dtb` from `arch/arm/boot` to the same tftpserver folder.
+
+## Build a FIT image
+
+To build linux from u-boot, we need to request a kernel, a devicetree and a root filesystem over tftp and save them into memory. Here is how I do it in u-boot shell
+
+```bash
+tftp Image; tftp 0x43000000 mt7629-rfb.dtb; tftp 0x41e00000 u-boot.bin
+```
+
+However, could combine all of them into what they called a [Flattenned Image Tree](https://fitspec.osfw.foundation/) or FIT image. Writting a recipe file and run a single command is all we need to do
+
+```c
+/dts-v1/;
+
+/ {
+    description = "My EA7250 FIT Image";
+    #address-cells = <1>;
+
+    images {
+        kernel {
+            description = "ARM Mainline Linux Kernel for MT7629";
+            data = /incbin/("Image.gz");
+            type = "kernel";
+            arch = "arm";
+            os = "linux";
+            compression = "gzip";
+	    load = <0x40008000>;
+	    entry = <0x40008000>;
+        };
+        fdt {
+            description = "mt7629-rfb DTB";
+            data = /incbin/("mt7629-rfb.dtb");
+            type = "flat_dt";
+            arch = "arm";
+            compression = "none";
+        };
+        initrd {
+            description = "Initrd";
+            data = /incbin/("initramfs.cpio.gz");
+            type = "ramdisk";
+            arch = "arm";
+            os = "linux";
+            compression = "gzip";
+        };
+    };
+
+    configurations {
+        default = "standard";
+        standard {
+            description = "Standard Boot";
+            kernel = "kernel";
+            fdt = "fdt";
+            ramdisk = "initrd";
+        };
+    };
+};
+```
+
+After running `mkimage -f board.its board.itb`, the combined image is ready to boot.
+
+# First linux test boot
+
+Going back u-boot shell, I connect one of the LAN port of the device to my test network (WAN port didn't work for me) and create a simple bootmenu option with the command chain to automate this.
+
+```bash
+setenv bootmenu_9 '10. Load board.itb from tftp and run start Linux.=run boot11'
+setenv boot11 'tftp board.itb; setenv bootargs console=ttyS0,115200; bootm'
+saveenv
+```
+
+The new option is now added and we could just select it on next boot without having to go into u-boot shell again. Since we are still here, I could run `run boot11` proceed
+
+The FIT image is recognized and loaded as expected but I encountered a kernel panic
+
+```
+[    3.610479] Run /init as init process
+[    3.614531] Failed to execute /init (error -8)
+[    3.618997] Run /sbin/init as init process
+[    3.623447] Starting init: /sbin/init exists but couldn't execute it (error -8)
+[    3.630774] Run /etc/init as init process
+[    3.634923] Run /bin/init as init process
+[    3.638984] Run /bin/sh as init process
+[    3.642915] Kernel panic - not syncing: No working init found.  Try passing init= option to kernel. See Linux Documentation/admin-guide/init.rst for guidance.
+[    3.657099] CPU: 0 UID: 0 PID: 1 Comm: swapper/0 Tainted: G        W           6.15.0 #3 NONE 
+```
+
+To be continued
+
 ## Create a debian image
 
 ## Save debian to a usb stick
@@ -555,4 +620,7 @@ run some game server since there is no graphic output
 ## What to do with the flash dump
 
 ## What I learnt
+
+## References
+- https://docs.mono.si/tutorials/linux-from-scratch#build-the-initramfs
 
