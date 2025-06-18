@@ -7,12 +7,12 @@ excerpt: Linksys EA7250 doesn't have a wireless driver to run OpenWRT, but it's 
 Last year, as I was on the hunt for some cheap routers with interesting features as a hobby (yes I'm kind of a router enjoyer myself, but people collect weird things all the time, aren't they), I stumbled upon this rare species, the [Linksys EA7500v3]() (specs below) which unlike many other Linksys models has ARM CPU. I specifically only look for those with mediatek chips because these have great support in Linux. Later on, I discovered that those wireless chips in this particular CPU have yet to get any open source driver support in OpenWRT, also the second ARM doesn't work in OpenWRT. In the end, I bought it anyway because without wireless, this could still be a good host for experimenting with custom linux build and a greate oppotunity for me to learn some kernel driver development.
 
 __Specs__:
-- CPU: Mediatek 
-- RAM: 
-- Flash:
-- Wireless:
-- Wire:
-- Unique features:
+- CPU: MediaTek MT7629BA ARMv7-A x2 
+- RAM: Nanya NT5CC128M16JR-EK 256MiB
+- Flash: Macronix MX35LF1GE4AB 128MiB SNAND
+- Wireless: MediaTek MT7761N, MT7762N
+- Wire: MediaTek MT7531BE
+- Unique features: none
 
 ## Contents
 * TOC
