@@ -247,9 +247,11 @@ mtd10.TRAINING.bin  mtd12.rootfs_1.bin  mtd14.factory_data.bin  mtd1.MIBIB.bin  
 
 All the scripts are available in my [Deco-X50-Firmware-Unpack repo](https://github.com/giahuy2201/Deco-X50-Firmware-Unpack)
 
+Anyway, carefully examining what's inside of each, only these `mtd11.rootfs.bin`, `mtd14.factory_data.bin` and `mtd15.runtime_data.bin` files interest me.
+
 ## Analyzing It
 
-Now, we could run each mtd through `binwalk`
+Starting off with the partitions named `rootfs` and `rootfs_1`
 
 ```bash
 $ binwalk3 Deco-X50-Firmware-Unpack/parts/mtd11.rootfs.bin
@@ -330,21 +332,106 @@ I found two volume: kernel and ubi_rootfs in that single `mtd11.rootfs.bin`, let
 $ ls ubifs-root/mtd11.rootfs.bin/
 img-1170313622_vol-kernel.ubifs  img-1170313622_vol-ubi_rootfs.ubifs
 ```
-I then run `binwalk` on those two file and eventually got the file name `system.dtb` which is basically a device tree with the kernel embedded as byte array which could be extracted and dissect some other day when I feel adventurous
+I then run `binwalk` on the first `vol-kernel` file and got a FIT image recipe with lots of fdts with each one having a corresponding entry in the configurations section. The kernel as well as each fdt is embedded as a byte array under `data` attribute. In short, this file is a FIT image.
 ```
 /dts-v1/;
 
 / {
-        timestamp = <0x65100535>;
-        description = "ARM64 OpenWrt FIT (Flattened Image Tree)";
-        #address-cells = <0x01>;
+	timestamp = <0x65100535>;
+	description = "ARM64 OpenWrt FIT (Flattened Image Tree)";
+	#address-cells = <0x01>;
 
-        images {
+	images {
 
-                kernel@1 {
-                        description = "ARM64 OpenWrt Linux-4.4.60";
-                        data = [6d 00 00 ...]
-...
+		kernel@1 {
+			description = "ARM64 OpenWrt Linux-4.4.60";
+			data = <kernel as byte array>;
+			type = "kernel";
+			arch = "arm64";
+			os = "linux";
+			compression = "lzma";
+			load = "A\b\0";
+			entry = "A\b\0";
+
+			hash@1 {
+				value = <0xde989520>;
+				algo = "crc32";
+			};
+
+			hash@2 {
+				value = <0x6b659679 0x2d43328f 0x4d916607 0x6cf403f8 0xe26ccb6f>;
+				algo = "sha1";
+			};
+		};
+
+		fdt@db-mp03.1 {
+			description = "ARM64 OpenWrt qcom-ipq50xx-mpxx device tree blob";
+			data = <fdt as byte array>;
+			type = "flat_dt";
+			arch = "arm64";
+			compression = "none";
+
+			hash@1 {
+				value = <0x42705678>;
+				algo = "crc32";
+			};
+
+			hash@2 {
+				value = <0x591d0d92 0x1da79ef 0xefba810f 0x86622d0a 0xbace69fb>;
+				algo = "sha1";
+			};
+		};
+
+                <alot more fdt>
+
+		fdt@mp03.5-c2 {
+			description = "ARM64 OpenWrt qcom-ipq50xx-mpxx device tree blob";
+			type = "flat_dt";
+			arch = "arm64";
+			compression = "none";
+
+			hash@1 {
+				value = <0xd4c95510>;
+				algo = "crc32";
+			};
+
+			hash@2 {
+				value = <0x9c082466 0xfac37df9 0x21c88033 0x974ac1b7 0x13cf61ed>;
+				algo = "sha1";
+			};
+		};
+	};
+
+	configurations {
+		default = "config@mp03.5-c2";
+
+		config@db-mp03.1 {
+			description = "OpenWrt";
+			kernel = "kernel@1";
+			fdt = "fdt@db-mp03.1";
+		};
+
+                <alot more config for each fdt>
+
+		config@mp03.5-c2 {
+			description = "OpenWrt";
+			kernel = "kernel@1";
+			fdt = "fdt@mp03.5-c2";
+		};
+	};
+};
+```
+
+Next, the second file that has `vol-ubi_rootfs` in its name is recognized as a Squashfs filesystem using `file` command. I unpacked it using `unsquashfs`
+
+Just to make sure that the two partition `mtd11` and `mtd12` has the same kernel and rootfs, I checked the extracted kernels using `md5sum` and the results of `unsquashfs`, though I had to removed all the broken symlinks, they turned out to be the same
+
+```bash
+fedora › md5sum ubifs-root/mtd11.rootfs.bin/img-1170313622_vol-kernel.ubifs ubifs-root/mtd12.rootfs_1.bin/img-1170313622_vol-kernel.ubifs
+27ae60292a3780ee7619d27964d168c8  ubifs-root/mtd11.rootfs.bin/img-1170313622_vol-kernel.ubifs
+27ae60292a3780ee7619d27964d168c8  ubifs-root/mtd12.rootfs_1.bin/img-1170313622_vol-kernel.ubifs
+fedora › diff -r squashfs-root squashfs-root1
+fedora › 
 ```
 
 ### RootFS
