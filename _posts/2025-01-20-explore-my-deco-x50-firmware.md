@@ -434,7 +434,156 @@ fedora › diff -r squashfs-root squashfs-root1
 fedora › 
 ```
 
+### Data partitions
+
+Given that the rootfs is stored as SquashFS image which is immutable, user data and customization for the ISP should be stored elsewhere. `mtd14.factory_data.bin` and `mtd15.runtime_data.bin` are where I believe I should find my TP-Link user account info and ISP pppoe credential.
+
+Running `binwalk` on these gives us a bunch of UBI image headers at what seemingly random offsets. From what I have learned reading here and there, these two are UBI volumes which when stored in mtd flash will have a bunch of header blocks for wear leveling. We'll use `ubireader_extract_files` to read extract a file tree from all those blocks.
+
+```bash
+fedora › tree ubifs-root
+ubifs-root
+├── 1080750813
+│   └── ubi_runtime_data
+│       ├── device-config
+│       ├── group-info
+│       └── user-config
+└── 1199603968
+    └── ubi_factory_data
+        └── product-info
+```
+
+`product-info` and `group-info` are text-based while `device-config` and `user-config` are recognized as just `data` using `file` command.
+
+```bash
+vendor_name:TP-LINK
+vendor_url:www.tp-link.com
+product_name:X50
+product_type:HOMEWIFISYSTEM
+language:US
+product_ver:1.0.0
+product_id:04D50100
+special_id:43410000
+hw_id:CCF852C3B5F2DEAEC78EA5A318D769CB
+oem_id:1B2077AB5B44FA21F0B608D979A36B10
+country:US
+```
+
+group-info
+```json
+{"role":"AP","key":"","gid":"70303de6-63d9-11e8-a3f6-0000eb367511"}
+```
+
+Run `binwalk -E` to get a entropy for the content of those two, the result like more or less the same, they're probably encrypted
+
+![Entroy on user-config](/assets/imgs/2025-01-20/binwalk-entropy-user-config.png)
+
+Now it's just the matter of finding the key and procedure for decrypting them inside the rootfs we found earlier
+
 ### RootFS
+
+Initially I tried to grep for 'user-config' on the output of `strings` of the `img-1170313622_vol-ubi_rootfs.ubifs` file and found no match, but I then realized the file was recognized as 'Squashfs filesystem, little endian, version 4.0, xz compressed'. So that explains it, it's all because of compression all along.
+
+Grepping the extracted squashfs directory gives much better results, consisting of text-based and binary file
+```bash
+fedora › grep -r 'user-config' squashfs-root
+squashfs-root/fw_data/partition-table:25=        user-config,0x00000000,0x00000000, 3, 2, 0, 4, bin/manufacture-userconf.bin
+squashfs-root/sbin/fullband-switch:             cfg.saveconfig("user-config")
+squashfs-root/sbin/saveconfig:elseif part == "u" or part == "user-config" then
+squashfs-root/sbin/saveconfig:    param = "user-config"
+squashfs-root/sbin/saveconfig:    print("Warning: saving user-config is for debug only")
+squashfs-root/lib/sync-server/scripts/sync-config:    rc = subprocess.call({"nvrammanager", "-p", "user-config", "-r", config_file})
+squashfs-root/lib/sync-server/scripts/probe:                                dbg("old firmware will not do user-config sync " .. devid)
+squashfs-root/lib/sync-server/scripts/force-sync:       rc = subprocess.call({"nvrammanager", "-p", "user-config", "-r", config_file})
+squashfs-root/usr/sbin/report_upload_components:        cfg.saveconfig("user-config")
+squashfs-root/usr/sbin/report_upload_components:cfg.saveconfig("user-config")
+squashfs-root/usr/sbin/homecare_check:    cfg.saveconfig("user-config")
+squashfs-root/usr/sbin/sync-check:        cfg.saveconfig("user-config")
+grep: squashfs-root/lib/libtr098.so: binary file matches
+grep: squashfs-root/usr/bin/nvrammanager: binary file matches
+grep: squashfs-root/usr/bin/tddp: binary file matches
+grep: squashfs-root/usr/bin/cwmp: binary file matches
+grep: squashfs-root/usr/bin/crytool: binary file matches
+grep: squashfs-root/usr/lib/lua/update-info.lua: binary file matches
+grep: squashfs-root/usr/lib/lua/luci/sys/re-config.lua: binary file matches
+grep: squashfs-root/usr/lib/lua/luci/sys/config.lua: binary file matches
+grep: squashfs-root/usr/lib/lua/luci/model/app_timesetting.lua: binary file matches
+grep: squashfs-root/usr/lib/lua/luci/model/accountmgnt.lua: binary file matches
+grep: squashfs-root/usr/lib/lua/luci/model/manager.lua: binary file matches
+grep: squashfs-root/usr/lib/lua/luci/controller/admin/mobile_app/device.lua: binary file matches
+grep: squashfs-root/usr/lib/lua/luci/controller/admin/device.lua: binary file matches
+grep: squashfs-root/usr/lib/lua/luci/controller/admin/sync.lua: binary file matches
+```
+
+Looking through those text files first which mostly lua scripts, I noticed they are all referenced to a module that enabled them to save the user-config. Here is an example
+```lua
+#!/usr/bin/lua
+
+local config = require "luci.sys.config"
+local param = nil
+local part = arg[1]
+
+if part == "a" or part == "all" then
+    param = nil
+elseif part == "u" or part == "user-config" then
+    param = "user-config"
+elseif part == "cw" or part == "cwmp-config" then
+    param = "cwmp-config"
+else
+    param = "device-config"
+end
+
+if param ~= "device-config" then
+    print("Warning: saving user-config is for debug only")
+end
+
+config.saveconfig(param)
+```
+
+And one of the matches from earlier has that name `squashfs-root/usr/lib/lua/luci/sys/config.lua`, and it's lua bytecode. Checking out its content with `string`, here are some interesting lines
+
+```bash
+nvrammanager -w /tmp/save-userconf.cry -p user-config >/dev/null 2>&1
+nvrammanager -e -p user-config >/dev/null 2>&1
+```
+
+`nvrammanager` is a executable binary
+```bash
+Usage: nvrammanager [OPTIONS1] [OPTIONS2]
+[OPTIONS1]
+  -r, --read=FILE                  Read partition to FILE
+  -w, --write=FILE                 Write FILE to partition
+  -e, --erase                      Erase partition
+  -s, --show                       Show partition table
+  -u, --upgrade=FILE               Upgrade firmware from FILE
+  -c  --check=FILE                 Check whether the firmware is valid
+  -f, --factory                    Force reset to factory config after upgrade
+  -h, --help                       Display usage
+  -i, --init                                            setup system and profile info to directory /tmp/
+[OPTIONS2]
+  -p, --partition=PTN_NAME         Partition name. It's needed when OPTIONS1(-r or -w or -e) exists.
+```
+
+So the `-p` from the lines is the partition name, and what the binary will write `-w` is the encrypted version of what we looking for. Something else must have created that `save-userconf.cry` file before the binary was called.
+
+Going back to lua bytecode earlier, the file seems to have been created through a function named 'enc_file_entry_prv' before the command got called
+```
+user-config
+fileToXml
+/tmp/save-userconf.xml
+is_user_config
+enc_file_entry_prv
+/tmp/save-userconf.cry
+execute
+nvrammanager -w /tmp/save-userconf.cry -p user-config >/dev/null 2>&1
+```
+
+Grepping rootfs again for 'enc_file_entry_prv' led us to 
+```
+squashfs-root/usr/lib/lua/luci/model/crypto.lua
+```
+
+After looking a decompiler for lua bytecode to make the process less painful, it eventually had to settle for a mix of this [unluac](https://sourceforge.net/projects/unluac/) for disassembling the bytecode into a bunch assembly-looking instructions and ChatGPT for turning them into a human-readable format.
 
 The other file is the actual root file system which when unpacked and traversed gave some interesting text-based scripts
 ```bash
