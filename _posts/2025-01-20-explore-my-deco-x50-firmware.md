@@ -455,6 +455,8 @@ ubifs-root
 
 `product-info` and `group-info` are text-based while `device-config` and `user-config` are recognized as just `data` using `file` command.
 
+
+group-info
 ```bash
 vendor_name:TP-LINK
 vendor_url:www.tp-link.com
@@ -467,11 +469,13 @@ special_id:43410000
 hw_id:CCF852C3B5F2DEAEC78EA5A318D769CB
 oem_id:1B2077AB5B44FA21F0B608D979A36B10
 country:US
+key:<some public ssh key that I discovered to be used for>
+gid:<look like some sort of uuid, it is the seed for our decryption key later>
 ```
 
 group-info
 ```json
-{"role":"AP","key":"","gid":"70303de6-63d9-11e8-a3f6-0000eb367511"}
+{"role":"AP","key":"same public key above","gid":"same uuid"}
 ```
 
 Run `binwalk -E` to get a entropy for the content of those two, the result like more or less the same, they're probably encrypted
@@ -479,8 +483,6 @@ Run `binwalk -E` to get a entropy for the content of those two, the result like 
 ![Entroy on user-config](/assets/imgs/2025-01-20/binwalk-entropy-user-config.png)
 
 Now it's just the matter of finding the key and procedure for decrypting them inside the rootfs we found earlier
-
-### RootFS
 
 Initially I tried to grep for 'user-config' on the output of `strings` of the `img-1170313622_vol-ubi_rootfs.ubifs` file and found no match, but I then realized the file was recognized as 'Squashfs filesystem, little endian, version 4.0, xz compressed'. So that explains it, it's all because of compression all along.
 
@@ -583,9 +585,203 @@ Grepping rootfs again for 'enc_file_entry_prv' led us to
 squashfs-root/usr/lib/lua/luci/model/crypto.lua
 ```
 
-After looking a decompiler for lua bytecode to make the process less painful, it eventually had to settle for a mix of this [unluac](https://sourceforge.net/projects/unluac/) for disassembling the bytecode into a bunch assembly-looking instructions and ChatGPT for turning them into a human-readable format.
+After looking a decompiler for lua bytecode to make the process less painful, it eventually had to settle for a mix of this [luadec](https://github.com/RE-Solver/luadec-openwrt-tplink) for disassembling the bytecode into a bunch assembly-looking instructions and ChatGPT for turning them into a human-readable format. This tool proves to be quite valuable later on when we need to make sense to the imported files. 
+
+```bash
+docker build -f docker/luadec.Dockerfile -t luadec .
+docker run -it --rm -v $PWD:/data luadec
+# inside container
+luadec -dis /data/crypto.lua > /data/crypto.dis
+```
+
+Taking a look at the disassembled lua file `crypto.dis`, I would say it's not that hard to read it and find what is relevant to our goal. I find it cumbersome to decode some long functions, so let's ask for a more human-readable version from ChatGPT. Here are my naming convention I used since we'll be dealing with a few more lua bytecode files when digging deeper. Bytecode file named `crypto.lua` will have the disassembled version named `crypto.dis` and AI-aided decompiled version named `crypto-ai.lua`. Similarly, extracted file `config.lua` after disassembled will be named `config.dis` and decompiled as `config-ai.lua`. Again all the work is saved in my GitHub repo if you want to have a look for yourself.
+
+We already know that function `crypto.enc_file_entry_prv` creates this `/tmp/save-userconf.cry` that will then be saved into flash using the `nvrammanager` executable from looking at the strings extracted from `config.lua`. Now that we've got the tool to decompile any luabyte code, let's do that for this file as well to know exactly how what parameters `crypto.enc_file_entry_prv` was called with.
+
+Here we found it to be part of function `config.saveconfig` which is actually being used alot in many text-based uncompiled lua files through the rootfs
+```lua
+    -- Save user config
+    if configType == "user-config" or configType == "ALL" or configType == nil then
+        -- This one create the xml file with user-config data
+        fileToXml("/tmp/save-userconf.xml", is_user_config)
+        crypto.enc_file_entry_prv("/tmp/save-userconf.xml", "/tmp/save-userconf.cry")
+        os.execute("nvrammanager -w /tmp/save-userconf.cry -p user-config >/dev/null 2>&1")
+        os.execute("rm -f /tmp/save-userconf.xml /tmp/save-userconf.cry >/dev/null 2>&1")
+    end
+```
+
+This means that there must be a equivalent function for decryption being used somewhere inside this `config.lua` file.
+
+As expected, we found it being referenced inside this `config.loadConfigToFiles`
+```lua
+    -- Decrypt the .cry to .xml
+    if partition == "user-config" or partition == "device-config" then
+        crypto.dec_file_entry_prv("/tmp/" .. partition .. ".cry", "/tmp/" .. partition .. ".xml")
+    else
+        crypto.dec_file_entry("/tmp/" .. partition .. ".cry", "/tmp/" .. partition .. ".xml")
+    end
+```
+
+At this state, in order to proceed further in the research, I had to figures out how the function parameters and external function calls are being passed into each decompiled function. ChatGPT didn't take the whole disassembled lua code so I had to send it each function separately and put them together in `*-ai.lua` files. This means that external functions / global variables that need to be used inside each of them have to be passed as upvalues. Here my brief guide on reading this assembly-looking lua
+- There is this one global function named `0` in the begining of this disassembled lua bytecode that declare what functions are exported using `SETGOBAL` optcode and what string constants are using `LOADK`. All internal function still `closure(Function 0_<some number>` (I renamed it for ease of reading) but have won't be assigned a name like line 137. 
+    ```asm
+    63 [-]: LOADK     R19 K23      ; R19 := "2EB38F7EC41D4B8E1422805BCD5F740BC3B95BE163E39D67579EB344427F7836"
+    64 [-]: LOADK     R20 K24      ; R20 := "360028C9064242F81074F4C127D299F6"
+    65 [-]: LOADK     R21 K25      ; R21 := "-K "
+    66 [-]: MOVE      R22 R19      ; R22 := R19
+    67 [-]: LOADK     R23 K26      ; R23 := " -iv "
+    68 [-]: MOVE      R24 R20      ; R24 := R20
+    69 [-]: CONCAT    R21 R21 R24  ; R21 := concat(R21 to R24)
+    ...
+    162 [-]: CLOSURE   R33 21       ; R33 := closure(Function #dec_file_entry_prv)
+    163 [-]: MOVE      R0 R26       ; R0 := R26
+    164 [-]: MOVE      R0 R24       ; R0 := R24
+    165 [-]: SETGLOBAL R33 K45      ; dec_file_entry_prv := R33
+    ```
+- `dec_file_entry_prv` was actually `closure(Function 0_9)` and it has 2 upvalues (`U0` and `U1`) according to its signature. The two values being assigned to R0 on line 163 and 164 are `U0` and `U1` respectively.
+    ```asm
+    ; Function:        dec_file_entry_prv()
+    ; Defined at line: 451
+    ; #Upvalues:       2
+    ; #Parameters:     3
+    ; Is_vararg:       0
+    ; Max Stack Size:  9
+    ```
+- When assigned to be `U0`, R32 was set to function `prepare_group_info` and the value of R24 which was the string 'default' was used for `U1`
+    ```asm
+    72 [-]: LOADK     R24 K29      ; R24 := "default"
+    73 [-]: LOADK     R25 K30      ; R25 := "prv"
+    74 [-]: CLOSURE   R26 0        ; R26 := closure(Function #prepare_group_info)
+    ```
+- Function `dec_file_entry_prv` has 3 parameters and I renamed them based on what I believe them to represent and replace the `U0`, `U1` with what they were assigned to
+    ```lua
+    function dec_file_entry_prv(input_file, output_file, arg2)
+        -- Call upvalue U0, returns two values
+        local enc_type, seed = prepare_group_info()
+        if enc_type == "default" then
+            return enc_file_entry(input_file, output_file, arg2)
+        end
+        -- Check if OpenSSL crypto is used
+        if crypt_used_openssl() then
+            -- Use enc_file_prv to decrypt, then dump result to file
+            local data = enc_file_prv(input_file, false, seed)
+            dump_to_file(data, output_file)
+        else
+            -- Fallback to WolfSSL decryption with unknown type error
+            wolfssl_enc_dec_file(input_file, output_file, "Unknown_Type_Error")
+        end
+        return
+    end
+    ```
+That's my two cents on the process. Let's speed things up before this post becomes overwhelmingly long.
+
+Here are what `prepare_group_info` and `enc_file_prv` look like , we won't go into `wolfssl_enc_dec_file` since our rootfs has openssl. 
+```lua
+function prepare_group_info()
+    local info = sync["read_group_info"]()
+
+    if info and info.gid and info.role then
+        return 'prv', info.gid
+    else
+        return 'default'
+    end
+end
+function enc_file_prv(path, toCompress, seed)
+  if type(path) ~= "string" or #path == 0 then
+    return nil
+  end
+  local cmd = construct_cmd(path, toCompress, true, seed) -- U0
+  local io_util = utils  -- Upvalue U1
+  return io_util.ltn12_popen(cmd)
+end
+```
+
+and their callees
+```lua
+function read_group_info()
+    local lock = locker.RWLocker('/var/run/group-info.lock')
+    lock:rlock()
+    if not nixio.fs["access"]('/tmp/group-info') then
+        local cmd = {
+            "nvrammanager", "-r", '/tmp/group-info', "-p", U4
+        }
+        local result = subprocess.call(cmd)
+        if result == nil then
+            return nil, "read partition"
+        end
+    end
+    local f = io.open('/tmp/group-info', "r")
+    _G.f = f
+    if not f then
+        return nil, "open file"
+    end
+    local raw = f:read("*a")
+    local decoded = json["decode"](raw)
+    f:close()
+    lock:ulock()
+    return decoded or {}, nil
+end
+function construct_cmd(input_file, toCompress, flag, seed)
+  local derived_key = read_file_if_fail_call_fallback_loader(seed)
+  local key_n_iv = "-K ".. derived_key .." -iv 360028C9064242F81074F4C127D299F6"
+  local cmd_template
+  if flag then
+    if toCompress then
+      cmd_template = 'openssl aes-256-cbc -e %s %s' or 'openssl zlib -e %s | openssl aes-256-cbc -e %s'
+    else
+      cmd_template = 'openssl zlib -e %s | openssl aes-256-cbc -e %s'
+    end
+  else
+    if toCompress then
+      cmd_template = 'openssl aes-256-cbc -d %s %s' or 'openssl aes-256-cbc -d %s %s | openssl zlib -d'
+    else
+      cmd_template = 'openssl aes-256-cbc -d %s %s | openssl zlib -d'
+    end
+  end
+  local input_path
+  if input_file then
+    local mod_result = '-in %q' % input_file
+    input_path = mod_result or ""
+  else
+    input_path = ""
+  end
+  local inputs = { input_path, key_n_iv }
+  local result = cmd_template % inputs
+  return result
+end
+```
+
+and one more
+```lua
+local function fallback_loader(the_file)
+    local normalized = string.upper(string.gsub(the_file, "-", ""))
+    local secret = '2EB38F7EC41D4B8E1422805BCD5F740BC3B95BE163E39D67579EB344427F7836'  -- U0 is assumed to be a secret string (e.g., a key)
+    local cmd = "echo " .. secret .. " | openssl sha256 -hmac " .. normalized .. " -r"
+    local exec_fn = U1.exec  -- U1 is a table with an 'exec' function
+    local output = exec_fn(cmd)
+    local cleaned = string.upper(string.gsub(output, "*[%a,%c]+", ""))
+    local handler = write_cleaned_into_file_so_it_wont_call_this_again()  -- the file is `/tmp/<the_file>`
+    handler(cleaned, the_file)
+    return cleaned
+end
+```
+
+Keep in mind that I renamed, populated and skipped many time consuming referencing back and forth to get to these function. In short, function `dec_file_entry_prv` and `dec_file_entry` from the code I shown above in `config.loadConfigToFiles` are basically calling openssl under the hood with a key generated from some seed with a hardcoded secret and iv in this `crypto.lua` bytecode.The difference between the two functions `dec_file_entry` don't use the seed `gid` from this `group-info` file while `dec_file_entry_prv` does.
+
+Putting all together, we got two nicely looking commands that will generate a key and decrypt your `user-config` and `device-config` without emulating arm using qemu like I did the first time to test out running `enc_file_entry_prv` from lua interactive shell. Also if you were to emulate arm and chroot into our extracted rootfs, I learned it from [this post skowronski.tech](https://skowronski.tech/2021/02/hacking-into-tp-link-archer-c6-shell-access-without-physical-disassembly/), but the method didn't work for me since these new Deco took away more of our control by not even allowing exporting backup file
+
+```bash
+# generate key from seed
+echo 2EB38F7EC41D4B8E1422805BCD5F740BC3B95BE163E39D67579EB344427F7836 | openssl sha256 -hmac <gid as your seed from group-info file without dash and uppercased> -r
+# copy the key from output and discard *stdin at the end to decrypt
+openssl aes-256-cbc -d -in user-config -K <your key goes here> -iv 360028C9064242F81074F4C127D299F6 | openssl zlib -d > user-config.xml
+```
+> I don't know if I should keep this `gid` a secret
+
+### RootFS
 
 The other file is the actual root file system which when unpacked and traversed gave some interesting text-based scripts
+
 ```bash
 /etc/tr098_ap.xml
 /etc/tr098.xml
