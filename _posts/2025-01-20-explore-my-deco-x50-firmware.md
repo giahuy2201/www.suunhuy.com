@@ -10,7 +10,7 @@ So I got this TP-Link router from my ISP with my new FTTH subscription that had 
 * TOC
 {:toc}
 
-## Getting It Open
+## Get It Open
 The router is compact and like many consummer devices nowaday, there is literally no screw, even under the label on the bottom. Since I didn't want to break it, after looking up some video online, I found this person showing it on [YouTube](https://youtu.be/61SyVmh0ao4?si=6KcfYRqtrpbRofKd) and proceed to follow. After some struggle I got it open and end up leaving some dents on the top edge of the housing.
 
 ![Inner assembly upside down](/assets/imgs/2025-01-20/deco-x50-inside.jpg)
@@ -21,7 +21,7 @@ Just a few more screws from the heatsinks on both side and the PCB is out.
 
 Upon a close inspection, there are 4 pins (near the bottom edge) clearly labeled by the manufacturer, how nice of them! Checking the voltage with a multimeter reveals that it is running at 1.8V. Alright, time to capture my the boot log.
 
-## Capturing Boot Log
+## Capture Boot Log
 
 I got my trusted soldering iron out to hook up some wires to the pads on the pcb, connect them to my serial adapter over a logic level shifter just to be safe. Turning it on, I have my serial adapter running with [tio](https://github.com/tio/tio) to capture its boot log.
 
@@ -55,7 +55,7 @@ Also important to save this flash address table for later on
 [    1.279123] 0x0000063c0000-0x0000074c0000 : "runtime_data"
 ```
 
-## Getting A Console
+## Get A Console
 After the router fully boots up with Linux, it doesn't respond to any keypress sent from my serial console, so it seems like that is it for linux on this thing. Checking out the boot log, I noticed this line before it boot Linux
 ```
 Enter magic string to stop autoboot in 1 seconds
@@ -180,7 +180,7 @@ e5 24 b5 ef 51 2e 09 ed
 ```
 With that, we should have no problem dumping the flash without pulling the chip off the board. However, that was what I believe I would have done if knew it at the time; I proceeded to lift the chip.
 
-## Dumping The Flash
+## Dump The Flash
 From the boot log we got the chip model, the Linux driver being used, and details such as page size, spare (Out-Of-Band) size and ECC capability
 
 ```
@@ -198,7 +198,7 @@ I proceeded to heat up the chip with flux and also the back of board where it is
 
 ![Flash chip on breakout board plugged into a T48 flash reader](/assets/imgs/2025-01-20/wson8-breakout.jpg)
 
-## Unpacking The Dump
+## Unpack The Dump
 Looking up the datasheet for this chip model, I have the page layout being 1024 bytes of data followed by 64 bytes of spare, exactly what we saw from the boot log. Running the binary dump directly through `binwalk` give a long list of XZ compressed data and UBI image at addresses that seem random and with some experience looking at binary, one could easily tell these are just false positives. After some research because I didn't know much at the time, new devices like what I have here uses NAND typed flash chip which give large storage capacity at low cost with a tradeoff being that each block, a smallest unit of erase/write, can wear out after certain number of write cycles. To combat this, manufacturer gives product developers an tiny extra amount of space on each page to store this extra data called Out-Of-Band data that is used to correct the actual data (up to a certain number of error - ECC capability)
 
 ![NAND Layout](https://raw.githubusercontent.com/giahuy2201/BCH-Primitive-Polynomial-Search/refs/heads/main/imgs/nand.png)
@@ -249,7 +249,7 @@ All the scripts are available in my [Deco-X50-Firmware-Unpack repo](https://gith
 
 Anyway, carefully examining what's inside of each, only these `mtd11.rootfs.bin`, `mtd14.factory_data.bin` and `mtd15.runtime_data.bin` files interest me.
 
-## Analyzing It
+## Analyze It
 
 Starting off with the partitions named `rootfs` and `rootfs_1`
 
@@ -780,7 +780,7 @@ openssl aes-256-cbc -d -in user-config -K <your key goes here> -iv 360028C906424
 
 ### RootFS
 
-The other file is the actual root file system which when unpacked and traversed gave some interesting text-based scripts
+I unpacked and traversed the rootfs tree and found some interesting text-based scripts
 
 ```bash
 /etc/tr098_ap.xml
@@ -811,8 +811,6 @@ The other file is the actual root file system which when unpacked and traversed 
 /usr/sbin/polling_dial_detection
 /usr/sbin/swconfig_load
 ```
-
-To be continued ...
 
 
 
