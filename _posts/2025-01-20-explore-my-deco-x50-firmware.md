@@ -778,6 +778,10 @@ openssl aes-256-cbc -d -in user-config -K <your key goes here> -iv 360028C906424
 ```
 > I don't know if I should keep this `gid` a secret
 
+Now that `user-config.xml` and `device-config.xml` are in full display, l looked through the tags and found some rsa key, some username and password that aren't generic, but unfortunately no pppoe credentials are in sight.
+
+To be continued ...
+
 ### RootFS
 
 I unpacked and traversed the rootfs tree and found some interesting text-based scripts
