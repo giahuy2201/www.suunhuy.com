@@ -768,7 +768,7 @@ end
 
 Keep in mind that I renamed, populated and skipped many time consuming referencing back and forth to get to these function. In short, function `dec_file_entry_prv` and `dec_file_entry` from the code I shown above in `config.loadConfigToFiles` are basically calling openssl under the hood with a key generated from some seed with a hardcoded secret and iv in this `crypto.lua` bytecode.The difference between the two functions `dec_file_entry` don't use the seed `gid` from this `group-info` file while `dec_file_entry_prv` does.
 
-Putting all together, we got two nicely looking commands that will generate a key and decrypt your `user-config` and `device-config` without emulating arm using qemu like I did the first time to test out running `enc_file_entry_prv` from lua interactive shell. Also if you were to emulate arm and chroot into our extracted rootfs, I learned it from [this post skowronski.tech](https://skowronski.tech/2021/02/hacking-into-tp-link-archer-c6-shell-access-without-physical-disassembly/), but the method didn't work for me since these new Deco took away more of our control by not even allowing exporting backup file
+Putting all together, we got two nicely looking commands that will generate a key and decrypt your `user-config` and `device-config` without emulating arm using qemu like I did the first time to test out running `enc_file_entry_prv` from lua interactive shell. Also if you were to emulate arm and chroot into our extracted rootfs, I learned it from [this post by skowronski.tech](https://skowronski.tech/2021/02/hacking-into-tp-link-archer-c6-shell-access-without-physical-disassembly/), but the method didn't work for me since these new Deco took away more of our control by not even allowing exporting backup file
 
 ```bash
 # generate key from seed
@@ -778,7 +778,6 @@ openssl aes-256-cbc -d -in user-config -K <your key goes here> -iv 360028C906424
 ```
 > I don't know if I should keep this `gid` a secret
 
-Now that `user-config.xml` and `device-config.xml` are in full display, l looked through the tags and found some rsa key, some username and password that aren't generic, but unfortunately no pppoe credentials are in sight.
 
 To be continued ...
 
