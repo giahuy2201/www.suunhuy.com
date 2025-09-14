@@ -24,3 +24,7 @@ sass:
 
 toc:
   max_level: 1 # default: 6
+
+# Rybbit Analytics
+rybbit_instance_url: "https://rybbit.suunhuy.com"
+rybbit_site_id: "2"

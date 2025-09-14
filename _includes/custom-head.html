@@ -1,0 +1,3 @@
+{% if jekyll.environment == "production" and site.rybbit_site_id %}
+    <script async defer src="{{ site.rybbit_instance_url }}/api/script.js" data-site-id="{{ site.rybbit_site_id }}"></script>
+{% endif %}
